@@ -39,6 +39,7 @@ import {
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import AuditDetailPanel from '../../components/table/usage-logs/AuditDetailPanel';
 
 export const useLogsData = () => {
   const { t } = useTranslation();
@@ -58,6 +59,7 @@ export const useLogsData = () => {
     COST: 'cost',
     RETRY: 'retry',
     IP: 'ip',
+    AUDIT: 'audit',
     DETAILS: 'details',
   };
 
@@ -162,6 +164,7 @@ export const useLogsData = () => {
       [COLUMN_KEYS.COST]: true,
       [COLUMN_KEYS.RETRY]: isAdminUser,
       [COLUMN_KEYS.IP]: true,
+      [COLUMN_KEYS.AUDIT]: true,
       [COLUMN_KEYS.DETAILS]: true,
     };
   };
@@ -343,7 +346,6 @@ export const useLogsData = () => {
       logs[i].key = logs[i].id;
       let other = getLogOther(logs[i].other);
       let expandDataLocal = [];
-
       if (isAdminUser && (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)) {
         expandDataLocal.push({
           key: t('渠道信息'),
@@ -557,6 +559,12 @@ export const useLogsData = () => {
         expandDataLocal.push({
           key: t('请求路径'),
           value: other.request_path,
+        });
+      }
+      if (logs[i].type === 2 || logs[i].type === 5) {
+        expandDataLocal.push({
+          key: t('请求审计'),
+          value: <AuditDetailPanel logRecord={logs[i]} t={t} />,
         });
       }
       if (other?.billing_source === 'subscription') {

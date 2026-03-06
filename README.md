@@ -1,3 +1,50 @@
+<!-- ===================== TEMP DEBUG PATCH START ===================== -->
+## ⚠️ Temporary Debug Patch Notice (Not Upstream README Content)
+
+> [!WARNING]
+> This section is a temporary debug add-on in this branch, used for request inspection
+> It is intentionally isolated and
+> can be removed later without affecting the original upstream README structure.
+
+### Request Audit (JSONL Sidecar, No DB Schema Change)
+
+- Audited endpoints (POST only):
+  - `/v1/chat/completions`
+  - `/v1/responses`
+- Storage: local JSONL files (daily split), not persisted to DB log tables
+- Default path: `logs/audit` (configurable)
+- UI: appended to existing `console/log` usage-log details (read via separate read-only APIs)
+
+### Environment Variables
+
+```bash
+AUDIT_LOG_ENABLED=true
+AUDIT_LOG_PATH=./logs/audit
+AUDIT_LOG_MAX_CONTENT_LENGTH=4000
+AUDIT_LOG_MAX_PAYLOAD_LENGTH=32768
+```
+
+### Safety and Truncation
+
+- Sensitive fields are redacted: `Authorization`, `api_key`, `password`, `token`, `secret`, etc.
+- Long content is truncated: message content, `data URL`, long `base64`, `image_url`, etc.
+- `stream=true` is supported for request-side audit capture (no full SSE response persistence).
+
+### Read-only APIs
+
+- `GET /api/audit/request/:request_id`
+- `GET /api/audit/match?created_at=...&user_id=...&token_id=...&path=...&method=POST`
+
+### Quick Validation
+
+1. Enable `AUDIT_LOG_ENABLED=true` and restart.
+2. Send a request to `/v1/chat/completions` or `/v1/responses`.
+3. Check `AUDIT_LOG_PATH` for `YYYY-MM-DD.jsonl`.
+4. Open `console/log` and inspect the appended request-audit section in usage log details.
+
+<!-- ====================== TEMP DEBUG PATCH END ====================== -->
+--- 
+
 <div align="center">
 
 ![new-api](/web/public/logo.png)

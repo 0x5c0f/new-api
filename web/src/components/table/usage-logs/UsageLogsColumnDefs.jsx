@@ -693,6 +693,25 @@ export const getLogsColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.AUDIT,
+      title: t('审计'),
+      dataIndex: 'request_id',
+      render: (text, record, index) => {
+        if (!(record.type === 2 || record.type === 5)) {
+          return <></>;
+        }
+        return record.request_id ? (
+          <Tag color='blue' shape='circle'>
+            {t('可查')}
+          </Tag>
+        ) : (
+          <Tag color='grey' shape='circle'>
+            {t('无')}
+          </Tag>
+        );
+      },
+    },
+    {
       key: COLUMN_KEYS.RETRY,
       title: t('重试'),
       dataIndex: 'retry',

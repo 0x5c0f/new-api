@@ -73,6 +73,10 @@ var DebugEnabled bool
 var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
+var AuditLogEnabled = false
+var AuditLogPath = ""
+var AuditLogMaxContentLength = 4000
+var AuditLogMaxPayloadLength = 32768
 
 var TLSInsecureSkipVerify bool
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}

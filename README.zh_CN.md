@@ -1,3 +1,56 @@
+<!-- ===================== TEMP DEBUG PATCH START ===================== -->
+## ⚠️ 临时调试功能补充说明（非上游原始 README 内容）
+
+> [!WARNING]
+> 本节为当前分支的临时调试补充，用于排查请求内容。
+> 与上游仓库原始 README 无关，后续可整体删除本节及相关代码。
+
+### 功能说明（请求审计，JSONL 旁路）
+
+- 审计范围（仅 POST）：
+  - `/v1/chat/completions`
+  - `/v1/responses`
+- 存储方式：本地 JSONL 文件，按天分片（不写数据库，不改表结构）
+- 默认文件目录：`logs/audit`（可通过环境变量覆盖）
+- 展示方式：`console/log` 使用日志详情中新增“请求审计”附加区域（通过独立只读接口读取）
+
+### 环境变量
+
+```bash
+AUDIT_LOG_ENABLED=true
+AUDIT_LOG_PATH=./logs/audit
+AUDIT_LOG_MAX_CONTENT_LENGTH=4000
+AUDIT_LOG_MAX_PAYLOAD_LENGTH=32768
+```
+
+- `AUDIT_LOG_ENABLED`：总开关，默认关闭
+- `AUDIT_LOG_PATH`：审计日志目录（JSONL）
+- `AUDIT_LOG_MAX_CONTENT_LENGTH`：单字段内容截断长度
+- `AUDIT_LOG_MAX_PAYLOAD_LENGTH`：整条审计记录大小上限
+
+### 安全与裁剪
+
+- 自动脱敏：`Authorization`、`api_key`、`password`、`token`、`secret` 等敏感字段
+- 自动处理超长内容：`data URL`、`base64`、`image_url`、超长文本等
+- `stream=true` 请求同样记录请求侧审计信息，不记录完整 SSE 响应流
+
+### 只读查询接口
+
+- `GET /api/audit/request/:request_id`
+- `GET /api/audit/match?created_at=...&user_id=...&token_id=...&path=...&method=POST`
+
+说明：前端优先按 `request_id` 查询，缺失时使用时间窗口 + 用户/令牌等字段做弱关联匹配。
+
+### 快速验证
+
+1. 设置 `AUDIT_LOG_ENABLED=true` 并重启服务
+2. 发起一次 `/v1/chat/completions` 或 `/v1/responses` 请求
+3. 检查 `AUDIT_LOG_PATH` 下是否生成 `YYYY-MM-DD.jsonl`
+4. 打开 `console/log`，展开对应使用日志的“请求审计”区域查看详情
+
+<!-- ====================== TEMP DEBUG PATCH END ====================== -->
+--- 
+
 <div align="center">
 
 ![new-api](/web/public/logo.png)
