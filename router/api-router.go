@@ -290,6 +290,12 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
+		requestAuditRoute := apiRouter.Group("/request-audit")
+		requestAuditRoute.Use(middleware.UserAuth())
+		requestAuditRoute.GET("/task/:task_id", controller.GetRequestAuditByTaskID)
+		requestAuditRoute.GET("/mj/:mj_id", controller.GetRequestAuditByMJID)
+		requestAuditRoute.GET("/:request_id", controller.GetRequestAuditByRequestID)
+
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)

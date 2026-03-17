@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@douyinfe/semi-ui';
 import {
@@ -30,9 +30,17 @@ import {
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { StatusContext } from '../../context/Status';
 
 export const useMjLogsData = () => {
   const { t } = useTranslation();
+  const [statusState] = useContext(StatusContext);
+  const requestAuditStatusReady = Boolean(statusState?.status);
+  const requestAuditEnabled =
+    requestAuditStatusReady &&
+    (statusState?.status?.self_use_mode_enabled ||
+      statusState?.status?.demo_site_enabled ||
+      false);
 
   // Define column keys for selection
   const COLUMN_KEYS = {
@@ -48,6 +56,7 @@ export const useMjLogsData = () => {
     PROMPT: 'prompt',
     PROMPT_EN: 'prompt_en',
     FAIL_REASON: 'fail_reason',
+    AUDIT: 'audit',
   };
 
   // Basic state
@@ -64,12 +73,18 @@ export const useMjLogsData = () => {
   const STORAGE_KEY = isAdminUser
     ? 'mj-logs-table-columns-admin'
     : 'mj-logs-table-columns-user';
+  const AUDIT_VISIBILITY_STORAGE_KEY = `${STORAGE_KEY}-audit-visible`;
+  const AUDIT_VISIBILITY_MIGRATION_KEY = `${STORAGE_KEY}-audit-visible-migrated`;
+  const AUDIT_VISIBILITY_USER_SET_KEY = `${STORAGE_KEY}-audit-visible-user-set`;
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [isModalOpenurl, setIsModalOpenurl] = useState(false);
   const [modalImageUrl, setModalImageUrl] = useState('');
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRecord, setAuditRecord] = useState(null);
 
   // Form state
   const [formApi, setFormApi] = useState(null);
@@ -92,6 +107,9 @@ export const useMjLogsData = () => {
 
   // Load saved column preferences from localStorage
   useEffect(() => {
+    if (!requestAuditStatusReady) {
+      return;
+    }
     const savedColumns = localStorage.getItem(STORAGE_KEY);
     if (savedColumns) {
       try {
@@ -104,6 +122,7 @@ export const useMjLogsData = () => {
           merged[COLUMN_KEYS.CHANNEL] = false;
           merged[COLUMN_KEYS.SUBMIT_RESULT] = false;
         }
+        merged[COLUMN_KEYS.AUDIT] = getStoredAuditVisibility();
         setVisibleColumns(merged);
       } catch (e) {
         console.error('Failed to parse saved column preferences', e);
@@ -112,7 +131,7 @@ export const useMjLogsData = () => {
     } else {
       initDefaultColumns();
     }
-  }, []);
+  }, [requestAuditEnabled, requestAuditStatusReady]);
 
   // Check banner notification
   useEffect(() => {
@@ -137,20 +156,75 @@ export const useMjLogsData = () => {
       [COLUMN_KEYS.PROMPT]: true,
       [COLUMN_KEYS.PROMPT_EN]: true,
       [COLUMN_KEYS.FAIL_REASON]: true,
+      [COLUMN_KEYS.AUDIT]: requestAuditEnabled,
     };
+  };
+
+  const getStoredAuditVisibility = () => {
+    if (!requestAuditEnabled) {
+      return false;
+    }
+    const storedVisibility = localStorage.getItem(AUDIT_VISIBILITY_STORAGE_KEY);
+    const userSetAuditVisibility =
+      localStorage.getItem(AUDIT_VISIBILITY_USER_SET_KEY) === 'true';
+    if (storedVisibility === 'true' || storedVisibility === 'false') {
+      const migrated =
+        localStorage.getItem(AUDIT_VISIBILITY_MIGRATION_KEY) === 'true';
+      if (!migrated) {
+        localStorage.setItem(AUDIT_VISIBILITY_MIGRATION_KEY, 'true');
+        if (storedVisibility === 'false' && !userSetAuditVisibility) {
+          localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+          return true;
+        }
+      }
+      if (storedVisibility === 'false' && !userSetAuditVisibility) {
+        localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+        return true;
+      }
+      return storedVisibility === 'true';
+    }
+    localStorage.setItem(AUDIT_VISIBILITY_MIGRATION_KEY, 'true');
+    localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+    return true;
+  };
+
+  const sanitizeColumnVisibilityForStorage = (columns) => {
+    const next = { ...columns };
+    if (!requestAuditEnabled) {
+      delete next[COLUMN_KEYS.AUDIT];
+    }
+    return next;
   };
 
   // Initialize default column visibility
   const initDefaultColumns = () => {
     const defaults = getDefaultColumnVisibility();
     setVisibleColumns(defaults);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(sanitizeColumnVisibilityForStorage(defaults)),
+    );
+    if (requestAuditEnabled) {
+      localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+      localStorage.removeItem(AUDIT_VISIBILITY_USER_SET_KEY);
+    }
   };
 
   // Handle column visibility change
   const handleColumnVisibilityChange = (columnKey, checked) => {
-    const updatedColumns = { ...visibleColumns, [columnKey]: checked };
+    const updatedColumns = {
+      ...visibleColumns,
+      [columnKey]:
+        columnKey === COLUMN_KEYS.AUDIT && !requestAuditEnabled ? false : checked,
+    };
     setVisibleColumns(updatedColumns);
+    if (columnKey === COLUMN_KEYS.AUDIT && requestAuditEnabled) {
+      localStorage.setItem(AUDIT_VISIBILITY_USER_SET_KEY, 'true');
+      localStorage.setItem(
+        AUDIT_VISIBILITY_STORAGE_KEY,
+        updatedColumns[COLUMN_KEYS.AUDIT] ? 'true' : 'false',
+      );
+    }
   };
 
   // Handle "Select All" checkbox
@@ -164,20 +238,37 @@ export const useMjLogsData = () => {
         !isAdminUser
       ) {
         updatedColumns[key] = false;
+      } else if (key === COLUMN_KEYS.AUDIT && !requestAuditEnabled) {
+        updatedColumns[key] = false;
       } else {
         updatedColumns[key] = checked;
       }
     });
 
     setVisibleColumns(updatedColumns);
+    if (requestAuditEnabled) {
+      localStorage.setItem(AUDIT_VISIBILITY_USER_SET_KEY, 'true');
+    }
   };
 
   // Persist column settings to the role-specific STORAGE_KEY
   useEffect(() => {
-    if (Object.keys(visibleColumns).length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleColumns));
+    if (!requestAuditStatusReady) {
+      return;
     }
-  }, [visibleColumns]);
+    if (Object.keys(visibleColumns).length > 0) {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(sanitizeColumnVisibilityForStorage(visibleColumns)),
+      );
+      if (requestAuditEnabled && visibleColumns[COLUMN_KEYS.AUDIT] !== undefined) {
+        localStorage.setItem(
+          AUDIT_VISIBILITY_STORAGE_KEY,
+          visibleColumns[COLUMN_KEYS.AUDIT] ? 'true' : 'false',
+        );
+      }
+    }
+  }, [requestAuditEnabled, requestAuditStatusReady, visibleColumns]);
 
   // Get form values helper function
   const getFormValues = () => {
@@ -276,6 +367,64 @@ export const useMjLogsData = () => {
     setIsModalOpenurl(true);
   };
 
+  const openAuditByRequestId = async (requestId) => {
+    if (!requestAuditEnabled) {
+      return;
+    }
+    if (!requestId) {
+      showError(t('当前审计记录没有可用的 Request ID'));
+      return;
+    }
+    setAuditRecord(null);
+    setAuditLoading(true);
+    try {
+      const res = await API.get(`/api/request-audit/${requestId}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setAuditRecord(data);
+        setShowAuditModal(true);
+      } else {
+        setAuditRecord(null);
+        setShowAuditModal(false);
+        showError(message);
+      }
+    } catch (error) {
+      setAuditRecord(null);
+      setShowAuditModal(false);
+      showError(t('获取请求审计详情失败'));
+    }
+    setAuditLoading(false);
+  };
+
+  const openAuditByMjId = async (mjId) => {
+    if (!requestAuditEnabled) {
+      return;
+    }
+    if (!mjId) {
+      showError(t('当前绘图记录没有可用的 MjID'));
+      return;
+    }
+    setAuditRecord(null);
+    setAuditLoading(true);
+    try {
+      const res = await API.get(`/api/request-audit/mj/${mjId}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setAuditRecord(data);
+        setShowAuditModal(true);
+      } else {
+        setAuditRecord(null);
+        setShowAuditModal(false);
+        showError(message);
+      }
+    } catch (error) {
+      setAuditRecord(null);
+      setShowAuditModal(false);
+      showError(t('获取请求审计详情失败'));
+    }
+    setAuditLoading(false);
+  };
+
   // Initialize data
   useEffect(() => {
     const localPageSize =
@@ -301,6 +450,11 @@ export const useMjLogsData = () => {
     isModalOpenurl,
     setIsModalOpenurl,
     modalImageUrl,
+    showAuditModal,
+    setShowAuditModal,
+    auditLoading,
+    auditRecord,
+    setAuditRecord,
 
     // Form state
     formApi,
@@ -320,6 +474,7 @@ export const useMjLogsData = () => {
     // Compact mode
     compactMode,
     setCompactMode,
+    requestAuditEnabled,
 
     // Functions
     loadLogs,
@@ -329,6 +484,8 @@ export const useMjLogsData = () => {
     copyText,
     openContentModal,
     openImageModal,
+    openAuditByRequestId,
+    openAuditByMjId,
     enrichLogs,
     syncPageData,
 

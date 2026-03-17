@@ -29,6 +29,7 @@ import AudioPreviewModal from './modals/AudioPreviewModal';
 import { useTaskLogsData } from '../../../hooks/task-logs/useTaskLogsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import RequestAuditModal from '../../request-audit/RequestAuditModal';
 
 const TaskLogsPage = () => {
   const taskLogsData = useTaskLogsData();
@@ -50,6 +51,19 @@ const TaskLogsPage = () => {
         isModalOpen={taskLogsData.isAudioModalOpen}
         setIsModalOpen={taskLogsData.setIsAudioModalOpen}
         audioClips={taskLogsData.audioClips}
+      />
+      <RequestAuditModal
+        visible={
+          taskLogsData.showAuditModal || Boolean(taskLogsData.auditRecord)
+        }
+        onCancel={() => {
+          taskLogsData.setShowAuditModal(false);
+          taskLogsData.setAuditRecord(null);
+        }}
+        loading={taskLogsData.auditLoading}
+        auditRecord={taskLogsData.auditRecord}
+        onOpenRequestAudit={taskLogsData.openAuditByRequestId}
+        t={taskLogsData.t}
       />
 
       <Layout>

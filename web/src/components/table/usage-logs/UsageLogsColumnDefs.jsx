@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import {
   Avatar,
+  Button,
   Space,
   Tag,
   Tooltip,
@@ -465,6 +466,8 @@ export const getLogsColumns = ({
   copyText,
   showUserInfoFunc,
   openChannelAffinityUsageCacheModal,
+  openAuditByRequestId,
+  requestAuditEnabled,
   isAdminUser,
   billingDisplayMode = 'price',
 }) => {
@@ -876,6 +879,27 @@ export const getLogsColumns = ({
           }
         }
         return isAdminUser ? <div>{content}</div> : <></>;
+      },
+    },
+    {
+      key: COLUMN_KEYS.AUDIT,
+      title: t('审计'),
+      dataIndex: 'request_id',
+      fixed: 'right',
+      width: 110,
+      render: (text, record) => {
+        if (!requestAuditEnabled || !record.request_id) {
+          return <></>;
+        }
+        return (
+          <Button
+            size='small'
+            type='tertiary'
+            onClick={() => openAuditByRequestId(record.request_id)}
+          >
+            {t('查看审计')}
+          </Button>
+        );
       },
     },
     {

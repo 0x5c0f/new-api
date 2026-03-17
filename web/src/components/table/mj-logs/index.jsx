@@ -28,6 +28,7 @@ import ContentModal from './modals/ContentModal';
 import { useMjLogsData } from '../../../hooks/mj-logs/useMjLogsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import RequestAuditModal from '../../request-audit/RequestAuditModal';
 
 const MjLogsPage = () => {
   const mjLogsData = useMjLogsData();
@@ -38,6 +39,17 @@ const MjLogsPage = () => {
       {/* Modals */}
       <ColumnSelectorModal {...mjLogsData} />
       <ContentModal {...mjLogsData} />
+      <RequestAuditModal
+        visible={mjLogsData.showAuditModal || Boolean(mjLogsData.auditRecord)}
+        onCancel={() => {
+          mjLogsData.setShowAuditModal(false);
+          mjLogsData.setAuditRecord(null);
+        }}
+        loading={mjLogsData.auditLoading}
+        auditRecord={mjLogsData.auditRecord}
+        onOpenRequestAudit={mjLogsData.openAuditByRequestId}
+        t={mjLogsData.t}
+      />
 
       <Layout>
         <CardPro

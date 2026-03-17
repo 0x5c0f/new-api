@@ -321,6 +321,8 @@ export const getMjLogsColumns = ({
   copyText,
   openContentModal,
   openImageModal,
+  openAuditByMjId,
+  requestAuditEnabled,
   isAdminUser,
 }) => {
   return [
@@ -481,6 +483,27 @@ export const getMjLogsColumns = ({
           >
             {text}
           </Typography.Text>
+        );
+      },
+    },
+    {
+      key: COLUMN_KEYS.AUDIT,
+      title: t('请求审计'),
+      dataIndex: 'mj_id',
+      fixed: 'right',
+      render: (text) => {
+        if (!requestAuditEnabled || !text) {
+          return <></>;
+        }
+        return (
+          <Button
+            size='small'
+            onClick={() => {
+              openAuditByMjId(text);
+            }}
+          >
+            {t('查看审计')}
+          </Button>
         );
       },
     },

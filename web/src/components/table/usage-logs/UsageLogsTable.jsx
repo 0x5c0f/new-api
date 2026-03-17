@@ -41,9 +41,11 @@ const LogsTable = (logsData) => {
     copyText,
     showUserInfoFunc,
     openChannelAffinityUsageCacheModal,
+    openAuditByRequestId,
     hasExpandableRows,
     isAdminUser,
     billingDisplayMode,
+    requestAuditEnabled,
     t,
     COLUMN_KEYS,
   } = logsData;
@@ -56,6 +58,8 @@ const LogsTable = (logsData) => {
       copyText,
       showUserInfoFunc,
       openChannelAffinityUsageCacheModal,
+      openAuditByRequestId,
+      requestAuditEnabled,
       isAdminUser,
       billingDisplayMode,
     });
@@ -65,6 +69,8 @@ const LogsTable = (logsData) => {
     copyText,
     showUserInfoFunc,
     openChannelAffinityUsageCacheModal,
+    openAuditByRequestId,
+    requestAuditEnabled,
     isAdminUser,
     billingDisplayMode,
   ]);

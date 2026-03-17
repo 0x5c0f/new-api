@@ -91,6 +91,7 @@ func RelayMidjourneyNotify(c *gin.Context) *dto.MidjourneyResponse {
 			Result:      "",
 		}
 	}
+	service.SetRequestAuditMJID(c, midjRequest.MjId)
 	midjourneyTask := model.GetByOnlyMJId(midjRequest.MjId)
 	if midjourneyTask == nil {
 		return &dto.MidjourneyResponse{
@@ -240,6 +241,7 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 		}
 	}()
 	midjResponse := &mjResp.Response
+	service.SetRequestAuditMJID(c, midjResponse.Result)
 	midjourneyTask := &model.Midjourney{
 		UserId:      info.UserId,
 		Code:        midjResponse.Code,
@@ -393,6 +395,9 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 	if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyVideo {
 		midjRequest.Action = constant.MjActionVideo
 	}
+	if midjRequest.TaskId != "" {
+		service.SetRequestAuditMJID(c, midjRequest.TaskId)
+	}
 
 	if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyImagine { //绘画任务，此类任务可重复
 		if midjRequest.Prompt == "" {
@@ -521,6 +526,9 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 		return &midjResponseWithStatus.Response
 	}
 	midjResponse := &midjResponseWithStatus.Response
+	if midjResponse.Result != "" {
+		service.SetRequestAuditMJID(c, midjResponse.Result)
+	}
 
 	defer func() {
 		if consumeQuota && midjResponseWithStatus.StatusCode == 200 {

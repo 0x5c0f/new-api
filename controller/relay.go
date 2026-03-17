@@ -65,6 +65,14 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 }
 
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
+	auditState := service.BeginRequestAudit(c, "relay")
+	defer func() {
+		if auditState != nil {
+			if finishErr := service.FinishRequestAudit(c); finishErr != nil {
+				logger.LogError(c, "request audit persist failed: "+finishErr.Error())
+			}
+		}
+	}()
 
 	requestId := c.GetString(common.RequestIdKey)
 	//group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
@@ -87,6 +95,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	defer func() {
 		if newAPIError != nil {
+			service.CaptureRequestAuditError(c, newAPIError)
 			logger.LogError(c, fmt.Sprintf("relay error: %s", newAPIError.Error()))
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
 			switch relayFormat {
@@ -121,6 +130,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
+	service.CaptureRequestAuditRelayInfo(c, relayInfo)
 
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
 	needCountToken := constant.CountToken
@@ -190,6 +200,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
+			service.AppendRequestAuditAttempt(c, 0, "", 0, relayInfo.RetryIndex, channelErr)
 			logger.LogError(c, channelErr.Error())
 			newAPIError = channelErr
 			break
@@ -218,6 +229,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		default:
 			newAPIError = relayHandler(c, relayInfo)
 		}
+		service.AppendRequestAuditAttempt(c, channel.Id, channel.Name, channel.Type, relayInfo.RetryIndex, newAPIError)
 
 		if newAPIError == nil {
 			relayInfo.LastError = nil
@@ -395,6 +407,14 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 }
 
 func RelayMidjourney(c *gin.Context) {
+	auditState := service.BeginRequestAudit(c, "midjourney")
+	defer func() {
+		if auditState != nil {
+			if finishErr := service.FinishRequestAudit(c); finishErr != nil {
+				logger.LogError(c, "request audit persist failed: "+finishErr.Error())
+			}
+		}
+	}()
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatMjProxy, nil, nil)
 
 	if err != nil {
@@ -404,6 +424,20 @@ func RelayMidjourney(c *gin.Context) {
 			"code":        4,
 		})
 		return
+	}
+	service.CaptureRequestAuditRelayInfo(c, relayInfo)
+	if mjID := c.Param("id"); mjID != "" {
+		service.SetRequestAuditMJID(c, mjID)
+	}
+	switch relayInfo.RelayMode {
+	case relayconstant.RelayModeMidjourneyNotify:
+		service.SetRequestAuditRouteGroup(c, "midjourney_notify")
+	case relayconstant.RelayModeMidjourneyTaskFetch, relayconstant.RelayModeMidjourneyTaskFetchByCondition:
+		service.SetRequestAuditRouteGroup(c, "midjourney_fetch")
+	case relayconstant.RelayModeMidjourneyTaskImageSeed:
+		service.SetRequestAuditRouteGroup(c, "midjourney_image_seed")
+	default:
+		service.SetRequestAuditRouteGroup(c, "midjourney_submit")
 	}
 
 	var mjErr *dto.MidjourneyResponse
@@ -422,6 +456,7 @@ func RelayMidjourney(c *gin.Context) {
 	//err = relayMidjourneySubmit(c, relayMode)
 	log.Println(mjErr)
 	if mjErr != nil {
+		service.CaptureRequestAuditError(c, fmt.Errorf("%s %s", mjErr.Description, mjErr.Result))
 		statusCode := http.StatusBadRequest
 		if mjErr.Code == 30 {
 			mjErr.Result = "当前分组负载已饱和，请稍后再试，或升级账户以提升服务质量。"
@@ -462,6 +497,14 @@ func RelayNotFound(c *gin.Context) {
 }
 
 func RelayTaskFetch(c *gin.Context) {
+	auditState := service.BeginRequestAudit(c, "task_fetch")
+	defer func() {
+		if auditState != nil {
+			if finishErr := service.FinishRequestAudit(c); finishErr != nil {
+				logger.LogError(c, "request audit persist failed: "+finishErr.Error())
+			}
+		}
+	}()
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, &dto.TaskError{
@@ -471,12 +514,25 @@ func RelayTaskFetch(c *gin.Context) {
 		})
 		return
 	}
+	service.CaptureRequestAuditRelayInfo(c, relayInfo)
+	if taskID := common.GetStringIfEmpty(c.Param("id"), c.Param("task_id")); taskID != "" {
+		service.SetRequestAuditTaskID(c, taskID)
+	}
 	if taskErr := relay.RelayTaskFetch(c, relayInfo.RelayMode); taskErr != nil {
+		service.CaptureRequestAuditError(c, taskErr.Error)
 		respondTaskError(c, taskErr)
 	}
 }
 
 func RelayTask(c *gin.Context) {
+	auditState := service.BeginRequestAudit(c, "task_submit")
+	defer func() {
+		if auditState != nil {
+			if finishErr := service.FinishRequestAudit(c); finishErr != nil {
+				logger.LogError(c, "request audit persist failed: "+finishErr.Error())
+			}
+		}
+	}()
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, &dto.TaskError{
@@ -486,8 +542,13 @@ func RelayTask(c *gin.Context) {
 		})
 		return
 	}
+	service.CaptureRequestAuditRelayInfo(c, relayInfo)
+	if taskID := common.GetStringIfEmpty(c.Param("id"), common.GetStringIfEmpty(c.Param("task_id"), c.Param("video_id"))); taskID != "" {
+		service.SetRequestAuditTaskID(c, taskID)
+	}
 
 	if taskErr := relay.ResolveOriginTask(c, relayInfo); taskErr != nil {
+		service.CaptureRequestAuditError(c, taskErr.Error)
 		respondTaskError(c, taskErr)
 		return
 	}
@@ -522,6 +583,7 @@ func RelayTask(c *gin.Context) {
 			var channelErr *types.NewAPIError
 			channel, channelErr = getChannel(c, relayInfo, retryParam)
 			if channelErr != nil {
+				service.AppendRequestAuditAttempt(c, 0, "", 0, retryParam.GetRetry(), channelErr)
 				logger.LogError(c, channelErr.Error())
 				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", http.StatusInternalServerError)
 				break
@@ -541,6 +603,11 @@ func RelayTask(c *gin.Context) {
 		c.Request.Body = io.NopCloser(bodyStorage)
 
 		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
+		var attemptErr error
+		if taskErr != nil {
+			attemptErr = taskErr.Error
+		}
+		service.AppendRequestAuditAttempt(c, channel.Id, channel.Name, channel.Type, retryParam.GetRetry(), attemptErr)
 		if taskErr == nil {
 			break
 		}
@@ -565,6 +632,7 @@ func RelayTask(c *gin.Context) {
 
 	// ── 成功：结算 + 日志 + 插入任务 ──
 	if taskErr == nil {
+		service.SetRequestAuditTaskID(c, relayInfo.PublicTaskID)
 		if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
 			common.SysError("settle task billing error: " + settleErr.Error())
 		}
@@ -592,6 +660,7 @@ func RelayTask(c *gin.Context) {
 	}
 
 	if taskErr != nil {
+		service.CaptureRequestAuditError(c, taskErr.Error)
 		respondTaskError(c, taskErr)
 	}
 }

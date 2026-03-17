@@ -29,6 +29,7 @@ import ParamOverrideModal from './modals/ParamOverrideModal';
 import { useLogsData } from '../../../hooks/usage-logs/useUsageLogsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import RequestAuditModal from '../../request-audit/RequestAuditModal';
 
 const LogsPage = () => {
   const logsData = useLogsData();
@@ -41,6 +42,17 @@ const LogsPage = () => {
       <UserInfoModal {...logsData} />
       <ChannelAffinityUsageCacheModal {...logsData} />
       <ParamOverrideModal {...logsData} />
+      <RequestAuditModal
+        visible={logsData.showAuditModal || Boolean(logsData.auditRecord)}
+        onCancel={() => {
+          logsData.setShowAuditModal(false);
+          logsData.setAuditRecord(null);
+        }}
+        loading={logsData.auditLoading}
+        auditRecord={logsData.auditRecord}
+        onOpenRequestAudit={logsData.openAuditByRequestId}
+        t={logsData.t}
+      />
 
       {/* Main Content */}
       <CardPro

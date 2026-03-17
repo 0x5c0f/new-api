@@ -30,7 +30,17 @@ func videoProxyError(c *gin.Context, status int, errType, message string) {
 
 func VideoProxy(c *gin.Context) {
 	taskID := c.Param("task_id")
+	auditState := service.BeginRequestAudit(c, "task_content")
+	defer func() {
+		if auditState != nil {
+			if finishErr := service.FinishRequestAudit(c); finishErr != nil {
+				logger.LogError(c.Request.Context(), "request audit persist failed: "+finishErr.Error())
+			}
+		}
+	}()
+	service.SetRequestAuditTaskID(c, taskID)
 	if taskID == "" {
+		service.CaptureRequestAuditError(c, fmt.Errorf("task_id is required"))
 		videoProxyError(c, http.StatusBadRequest, "invalid_request_error", "task_id is required")
 		return
 	}
@@ -38,16 +48,19 @@ func VideoProxy(c *gin.Context) {
 	userID := c.GetInt("id")
 	task, exists, err := model.GetByTaskId(userID, taskID)
 	if err != nil {
+		service.CaptureRequestAuditError(c, err)
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
 		return
 	}
 	if !exists || task == nil {
+		service.CaptureRequestAuditError(c, fmt.Errorf("task not found: %s", taskID))
 		videoProxyError(c, http.StatusNotFound, "invalid_request_error", "Task not found")
 		return
 	}
 
 	if task.Status != model.TaskStatusSuccess {
+		service.CaptureRequestAuditError(c, fmt.Errorf("task is not completed yet, current status: %s", task.Status))
 		videoProxyError(c, http.StatusBadRequest, "invalid_request_error",
 			fmt.Sprintf("Task is not completed yet, current status: %s", task.Status))
 		return
@@ -55,6 +68,7 @@ func VideoProxy(c *gin.Context) {
 
 	channel, err := model.CacheGetChannel(task.ChannelId)
 	if err != nil {
+		service.CaptureRequestAuditError(c, err)
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to get channel for task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to retrieve channel information")
 		return
@@ -68,6 +82,7 @@ func VideoProxy(c *gin.Context) {
 	proxy := channel.GetSetting().Proxy
 	client, err := service.GetHttpClientWithProxy(proxy)
 	if err != nil {
+		service.CaptureRequestAuditError(c, err)
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to create proxy client for task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy client")
 		return
@@ -77,6 +92,7 @@ func VideoProxy(c *gin.Context) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "", nil)
 	if err != nil {
+		service.CaptureRequestAuditError(c, err)
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to create request: %s", err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
@@ -86,12 +102,14 @@ func VideoProxy(c *gin.Context) {
 	case constant.ChannelTypeGemini:
 		apiKey := task.PrivateData.Key
 		if apiKey == "" {
+			service.CaptureRequestAuditError(c, fmt.Errorf("api key not stored for task"))
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Missing stored API key for Gemini task %s", taskID))
 			videoProxyError(c, http.StatusInternalServerError, "server_error", "API key not stored for task")
 			return
 		}
 		videoURL, err = getGeminiVideoURL(channel, task, apiKey)
 		if err != nil {
+			service.CaptureRequestAuditError(c, err)
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Gemini video URL for task %s: %s", taskID, err.Error()))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Gemini video URL")
 			return
@@ -100,6 +118,7 @@ func VideoProxy(c *gin.Context) {
 	case constant.ChannelTypeVertexAi:
 		videoURL, err = getVertexVideoURL(channel, task)
 		if err != nil {
+			service.CaptureRequestAuditError(c, err)
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Vertex video URL for task %s: %s", taskID, err.Error()))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Vertex video URL")
 			return
@@ -114,6 +133,7 @@ func VideoProxy(c *gin.Context) {
 
 	videoURL = strings.TrimSpace(videoURL)
 	if videoURL == "" {
+		service.CaptureRequestAuditError(c, fmt.Errorf("video url is empty"))
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Video URL is empty for task %s", taskID))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		return
@@ -121,6 +141,7 @@ func VideoProxy(c *gin.Context) {
 
 	if strings.HasPrefix(videoURL, "data:") {
 		if err := writeVideoDataURL(c, videoURL); err != nil {
+			service.CaptureRequestAuditError(c, err)
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to decode video data URL for task %s: %s", taskID, err.Error()))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		}
@@ -129,6 +150,7 @@ func VideoProxy(c *gin.Context) {
 
 	req.URL, err = url.Parse(videoURL)
 	if err != nil {
+		service.CaptureRequestAuditError(c, err)
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to parse URL %s: %s", videoURL, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
@@ -136,6 +158,7 @@ func VideoProxy(c *gin.Context) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		service.CaptureRequestAuditError(c, err)
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to fetch video from %s: %s", videoURL, err.Error()))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		return
@@ -143,6 +166,7 @@ func VideoProxy(c *gin.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		service.CaptureRequestAuditError(c, fmt.Errorf("upstream service returned status %d", resp.StatusCode))
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Upstream returned status %d for %s", resp.StatusCode, videoURL))
 		videoProxyError(c, http.StatusBadGateway, "server_error",
 			fmt.Sprintf("Upstream service returned status %d", resp.StatusCode))
@@ -158,6 +182,7 @@ func VideoProxy(c *gin.Context) {
 	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
+		service.CaptureRequestAuditError(c, err)
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
 	}
 }
