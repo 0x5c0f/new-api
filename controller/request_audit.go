@@ -63,9 +63,9 @@ func respondRequestAudit(c *gin.Context, audit *model.RequestAudit, related []*m
 }
 
 func buildRequestAuditResponse(audit *model.RequestAudit, relatedRecords []gin.H) gin.H {
-	requestPayload := parseAuditPayload(audit.RequestPayload)
-	responsePayload := parseAuditPayload(audit.ResponsePayload)
-	tracePayload := parseAuditPayload(audit.TracePayload)
+	requestPayload := parseAuditPayload(string(audit.RequestPayload))
+	responsePayload := parseAuditPayload(string(audit.ResponsePayload))
+	tracePayload := parseAuditPayload(string(audit.TracePayload))
 	upstreamModelName, tracePayload := enrichAuditModelResolution(audit, tracePayload)
 	return gin.H{
 		"id":                  audit.ID,

@@ -350,9 +350,9 @@ func FinishRequestAudit(c *gin.Context) error {
 	captureRequestAuditResponse(c, state)
 	attachLinkedLogs(state)
 	syncRequestAuditRelayInfo(state)
-	state.Audit.RequestPayload = marshalAuditPart(state.RequestPayload)
-	state.Audit.ResponsePayload = marshalAuditPart(state.ResponsePayload)
-	state.Audit.TracePayload = marshalAuditPart(state.TracePayload)
+	state.Audit.RequestPayload = model.RequestAuditPayload(marshalAuditPart(state.RequestPayload))
+	state.Audit.ResponsePayload = model.RequestAuditPayload(marshalAuditPart(state.ResponsePayload))
+	state.Audit.TracePayload = model.RequestAuditPayload(marshalAuditPart(state.TracePayload))
 	return model.UpsertRequestAudit(state.Audit)
 }
 

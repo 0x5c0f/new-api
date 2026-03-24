@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 const (
@@ -22,40 +23,53 @@ const (
 )
 
 type RequestAudit struct {
-	ID                int64  `json:"id" gorm:"primaryKey;autoIncrement"`
-	CreatedAt         int64  `json:"created_at" gorm:"bigint;index:idx_request_audits_created_at"`
-	UpdatedAt         int64  `json:"updated_at" gorm:"bigint"`
-	RequestID         string `json:"request_id" gorm:"type:varchar(64);uniqueIndex"`
-	UserId            int    `json:"user_id" gorm:"index"`
-	Username          string `json:"username" gorm:"type:varchar(64);index;default:''"`
-	Mode              string `json:"mode" gorm:"type:varchar(16);index;default:''"`
-	RouteGroup        string `json:"route_group" gorm:"type:varchar(32);index;default:''"`
-	RoutePath         string `json:"route_path" gorm:"type:varchar(255);index;default:''"`
-	Method            string `json:"method" gorm:"type:varchar(16);default:''"`
-	StatusCode        int    `json:"status_code" gorm:"index"`
-	Success           bool   `json:"success" gorm:"index"`
-	RelayFormat       string `json:"relay_format" gorm:"type:varchar(32);index;default:''"`
-	RelayMode         int    `json:"relay_mode" gorm:"index"`
-	IsStream          bool   `json:"is_stream"`
-	IsPlayground      bool   `json:"is_playground"`
-	ModelName         string `json:"model_name" gorm:"type:varchar(128);index;default:''"`
-	UpstreamModelName string `json:"upstream_model_name" gorm:"type:varchar(128);default:''"`
-	Group             string `json:"group" gorm:"column:group;type:varchar(64);index;default:''"`
-	TokenId           int    `json:"token_id" gorm:"index"`
-	TokenName         string `json:"token_name" gorm:"type:varchar(128);index;default:''"`
-	ChannelId         int    `json:"channel_id" gorm:"index"`
-	ChannelName       string `json:"channel_name" gorm:"type:varchar(128);default:''"`
-	ChannelType       int    `json:"channel_type" gorm:"index"`
-	TaskID            string `json:"task_id" gorm:"type:varchar(191);index;default:''"`
-	MjID              string `json:"mj_id" gorm:"type:varchar(191);index;default:''"`
-	StartedAt         int64  `json:"started_at" gorm:"bigint;index"`
-	FinishedAt        int64  `json:"finished_at" gorm:"bigint;index"`
-	LatencyMs         int64  `json:"latency_ms"`
-	FirstResponseMs   int64  `json:"first_response_ms"`
-	RetryCount        int    `json:"retry_count"`
-	RequestPayload    string `json:"request_payload" gorm:"type:text"`
-	ResponsePayload   string `json:"response_payload" gorm:"type:text"`
-	TracePayload      string `json:"trace_payload" gorm:"type:text"`
+	ID                int64               `json:"id" gorm:"primaryKey;autoIncrement"`
+	CreatedAt         int64               `json:"created_at" gorm:"bigint;index:idx_request_audits_created_at"`
+	UpdatedAt         int64               `json:"updated_at" gorm:"bigint"`
+	RequestID         string              `json:"request_id" gorm:"type:varchar(64);uniqueIndex"`
+	UserId            int                 `json:"user_id" gorm:"index"`
+	Username          string              `json:"username" gorm:"type:varchar(64);index;default:''"`
+	Mode              string              `json:"mode" gorm:"type:varchar(16);index;default:''"`
+	RouteGroup        string              `json:"route_group" gorm:"type:varchar(32);index;default:''"`
+	RoutePath         string              `json:"route_path" gorm:"type:varchar(255);index;default:''"`
+	Method            string              `json:"method" gorm:"type:varchar(16);default:''"`
+	StatusCode        int                 `json:"status_code" gorm:"index"`
+	Success           bool                `json:"success" gorm:"index"`
+	RelayFormat       string              `json:"relay_format" gorm:"type:varchar(32);index;default:''"`
+	RelayMode         int                 `json:"relay_mode" gorm:"index"`
+	IsStream          bool                `json:"is_stream"`
+	IsPlayground      bool                `json:"is_playground"`
+	ModelName         string              `json:"model_name" gorm:"type:varchar(128);index;default:''"`
+	UpstreamModelName string              `json:"upstream_model_name" gorm:"type:varchar(128);default:''"`
+	Group             string              `json:"group" gorm:"column:group;type:varchar(64);index;default:''"`
+	TokenId           int                 `json:"token_id" gorm:"index"`
+	TokenName         string              `json:"token_name" gorm:"type:varchar(128);index;default:''"`
+	ChannelId         int                 `json:"channel_id" gorm:"index"`
+	ChannelName       string              `json:"channel_name" gorm:"type:varchar(128);default:''"`
+	ChannelType       int                 `json:"channel_type" gorm:"index"`
+	TaskID            string              `json:"task_id" gorm:"type:varchar(191);index;default:''"`
+	MjID              string              `json:"mj_id" gorm:"type:varchar(191);index;default:''"`
+	StartedAt         int64               `json:"started_at" gorm:"bigint;index"`
+	FinishedAt        int64               `json:"finished_at" gorm:"bigint;index"`
+	LatencyMs         int64               `json:"latency_ms"`
+	FirstResponseMs   int64               `json:"first_response_ms"`
+	RetryCount        int                 `json:"retry_count"`
+	RequestPayload    RequestAuditPayload `json:"request_payload"`
+	ResponsePayload   RequestAuditPayload `json:"response_payload"`
+	TracePayload      RequestAuditPayload `json:"trace_payload"`
+}
+
+type RequestAuditPayload string
+
+func (RequestAuditPayload) GormDataType() string {
+	return "text"
+}
+
+func (RequestAuditPayload) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
+	if db != nil && db.Dialector != nil && db.Dialector.Name() == "mysql" {
+		return "MEDIUMTEXT"
+	}
+	return "TEXT"
 }
 
 func UpsertRequestAudit(audit *RequestAudit) error {
