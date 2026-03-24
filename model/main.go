@@ -285,6 +285,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := migrateRequestAuditPayloadColumnsToMediumText(DB, common.UsingMySQL); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -373,6 +376,9 @@ func migrateLOGDB() error {
 		return err
 	}
 	if err = LOG_DB.AutoMigrate(&RequestAudit{}); err != nil {
+		return err
+	}
+	if err = migrateRequestAuditPayloadColumnsToMediumText(LOG_DB, common.LogSqlType == common.DatabaseTypeMySQL); err != nil {
 		return err
 	}
 	return nil
@@ -504,6 +510,45 @@ func migrateTokenModelLimitsToText() error {
 		}
 		common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to text", tableName, columnName))
 	}
+	return nil
+}
+
+func migrateRequestAuditPayloadColumnsToMediumText(db *gorm.DB, isMySQL bool) error {
+	if !isMySQL || db == nil {
+		return nil
+	}
+
+	tableName := "request_audits"
+	columns := []string{"request_payload", "response_payload", "trace_payload"}
+
+	if !db.Migrator().HasTable(tableName) {
+		return nil
+	}
+
+	for _, columnName := range columns {
+		if !db.Migrator().HasColumn(&RequestAudit{}, columnName) {
+			continue
+		}
+
+		var columnType string
+		if err := db.Raw(`SELECT COLUMN_TYPE FROM information_schema.columns
+				WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+			tableName, columnName).Scan(&columnType).Error; err != nil {
+			common.SysLog(fmt.Sprintf("Warning: failed to query metadata for %s.%s: %v", tableName, columnName, err))
+		} else {
+			lowerType := strings.ToLower(columnType)
+			if lowerType == "mediumtext" || lowerType == "longtext" {
+				continue
+			}
+		}
+
+		alterSQL := fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s MEDIUMTEXT", tableName, columnName)
+		if err := db.Exec(alterSQL).Error; err != nil {
+			return fmt.Errorf("failed to migrate %s.%s to MEDIUMTEXT: %w", tableName, columnName, err)
+		}
+		common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to MEDIUMTEXT", tableName, columnName))
+	}
+
 	return nil
 }
 
