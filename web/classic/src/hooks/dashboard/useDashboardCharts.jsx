@@ -35,6 +35,7 @@ import {
   updateMapValue,
   initializeMaps,
   processUserData,
+  processUserDataByToken,
 } from '../../helpers/dashboard';
 
 const USER_COLORS = [
@@ -383,6 +384,48 @@ export const useDashboardCharts = (
     color: { type: 'ordinal', range: USER_COLORS },
   });
 
+  // ========== Admin: 用户消耗排行(token) ==========
+  const [spec_user_token_rank, setSpecUserTokenRank] = useState({
+    type: 'bar',
+    data: [{ id: 'userTokenRankData', values: [] }],
+    xField: 'rawTokenUsed',
+    yField: 'User',
+    seriesField: 'User',
+    direction: 'horizontal',
+    legends: { visible: false },
+    title: {
+      visible: true,
+      text: t('用户消耗排行(token)'),
+      subtext: '',
+    },
+    bar: {
+      state: { hover: { stroke: '#000', lineWidth: 1 } },
+    },
+    label: {
+      visible: true,
+      position: 'outside',
+      formatMethod: (value, datum) => renderNumber(datum['rawTokenUsed'] || 0),
+    },
+    axes: [{
+      orient: 'left',
+      type: 'band',
+      label: { visible: true },
+    }, {
+      orient: 'bottom',
+      type: 'linear',
+      visible: false,
+    }],
+    tooltip: {
+      mark: {
+        content: [{
+          key: (datum) => datum['User'],
+          value: (datum) => renderNumber(datum['rawTokenUsed'] || 0),
+        }],
+      },
+    },
+    color: { type: 'ordinal', range: USER_COLORS },
+  });
+
   // ========== 数据处理函数 ==========
   const generateModelColors = useCallback((uniqueModels, modelColors) => {
     const newModelColors = {};
@@ -607,6 +650,34 @@ export const useDashboardCharts = (
     [dataExportDefaultTime, t],
   );
 
+  // ========== 用户维度图表数据处理(token) ==========
+  const updateUserTokenChartData = useCallback(
+    (data) => {
+      const { rankingData } = processUserDataByToken(
+        data,
+        dataExportDefaultTime,
+        10,
+      );
+
+      const userTokenRankValues = rankingData.map((item) => ({
+        User: item.User,
+        rawTokenUsed: item.TokenUsed,
+      })).sort((a, b) => b.rawTokenUsed - a.rawTokenUsed);
+
+      const totalTokenUsed = rankingData.reduce((s, i) => s + i.TokenUsed, 0);
+
+      setSpecUserTokenRank((prev) => ({
+        ...prev,
+        data: [{ id: 'userTokenRankData', values: userTokenRankValues }],
+        title: {
+          ...prev.title,
+          subtext: `${t('总计')}：${renderNumber(totalTokenUsed)}`,
+        },
+      }));
+    },
+    [dataExportDefaultTime, t],
+  );
+
   // ========== 初始化图表主题 ==========
   useEffect(() => {
     initVChartSemiTheme({
@@ -620,9 +691,11 @@ export const useDashboardCharts = (
     spec_model_line,
     spec_rank_bar,
     spec_user_rank,
+    spec_user_token_rank,
     spec_user_trend,
     updateChartData,
     updateUserChartData,
+    updateUserTokenChartData,
     generateModelColors,
   };
 };
