@@ -442,3 +442,58 @@ export const processUserData = (data, dataExportDefaultTime, limit = 10) => {
 
   return { rankingData, trendData, topUsers };
 };
+
+// ========== 用户维度数据处理(token) ==========
+export const processUserDataByToken = (data, dataExportDefaultTime, limit = 10) => {
+  const userTokenTotal = new Map();
+  data.forEach((item) => {
+    const prev = userTokenTotal.get(item.username) || 0;
+    userTokenTotal.set(item.username, prev + (item.token_used || 0));
+  });
+
+  const sorted = Array.from(userTokenTotal.entries()).sort(
+    (a, b) => b[1] - a[1],
+  );
+  const topUsers = sorted.slice(0, limit).map(([u]) => u);
+  const topUserSet = new Set(topUsers);
+
+  const rankingData = sorted.slice(0, limit).map(([username, tokenUsed]) => ({
+    User: username,
+    TokenUsed: tokenUsed,
+  }));
+
+  const showYear = isDataCrossYear(data.map((item) => item.created_at));
+
+  const timeUserMap = new Map();
+  const allTimePoints = new Set();
+
+  data.forEach((item) => {
+    const timeKey = timestamp2string1(
+      item.created_at,
+      dataExportDefaultTime,
+      showYear,
+    );
+    allTimePoints.add(timeKey);
+    const user = topUserSet.has(item.username) ? item.username : null;
+    if (!user) return;
+    const key = `${timeKey}-${user}`;
+    const prev = timeUserMap.get(key) || { tokenUsed: 0 };
+    timeUserMap.set(key, { tokenUsed: prev.tokenUsed + (item.token_used || 0) });
+  });
+
+  const sortedTimePoints = Array.from(allTimePoints).sort();
+  const trendData = [];
+  sortedTimePoints.forEach((time) => {
+    topUsers.forEach((user) => {
+      const key = `${time}-${user}`;
+      const val = timeUserMap.get(key);
+      trendData.push({
+        Time: time,
+        User: user,
+        TokenUsed: val?.tokenUsed || 0,
+      });
+    });
+  });
+
+  return { rankingData, trendData, topUsers };
+};
