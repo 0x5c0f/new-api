@@ -25,6 +25,7 @@ import {
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { getTaskLogsColumns } from './TaskLogsColumnDefs';
+import RequestAuditModal from '../../request-audit/RequestAuditModal';
 
 const TaskLogsTable = (taskLogsData) => {
   const {
@@ -41,8 +42,15 @@ const TaskLogsTable = (taskLogsData) => {
     openContentModal,
     openVideoModal,
     openAudioModal,
+    openAuditByTaskId,
     showUserInfoFunc,
     isAdminUser,
+    requestAuditEnabled,
+    showAuditModal,
+    setShowAuditModal,
+    auditLoading,
+    auditRecord,
+    openAuditByRequestId,
     t,
     COLUMN_KEYS,
   } = taskLogsData;
@@ -56,10 +64,12 @@ const TaskLogsTable = (taskLogsData) => {
       openContentModal,
       openVideoModal,
       openAudioModal,
+      openAuditByTaskId,
+      requestAuditEnabled,
       showUserInfoFunc,
       isAdminUser,
     });
-  }, [t, COLUMN_KEYS, copyText, openContentModal, openVideoModal, openAudioModal, showUserInfoFunc, isAdminUser]);
+  }, [t, COLUMN_KEYS, copyText, openContentModal, openVideoModal, openAudioModal, openAuditByTaskId, requestAuditEnabled, showUserInfoFunc, isAdminUser]);
 
   // Filter columns based on visibility settings
   const getVisibleColumns = () => {
@@ -77,6 +87,7 @@ const TaskLogsTable = (taskLogsData) => {
   }, [compactMode, visibleColumnsList]);
 
   return (
+    <>
     <CardTable
       columns={tableColumns}
       dataSource={logs}
@@ -106,6 +117,15 @@ const TaskLogsTable = (taskLogsData) => {
       }}
       hidePagination={true}
     />
+    <RequestAuditModal
+      visible={showAuditModal}
+      onCancel={() => setShowAuditModal(false)}
+      loading={auditLoading}
+      auditRecord={auditRecord}
+      onOpenRequestAudit={openAuditByRequestId}
+      t={t}
+    />
+    </>
   );
 };
 

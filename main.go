@@ -300,6 +300,18 @@ func InitResources() error {
 	if err != nil {
 		return err
 	}
+	// Ensure request_audits table exists (InitLogDB may skip migrateLOGDB when LOG_SQL_DSN is empty)
+	if err := model.MigrateRequestAuditTable(); err != nil {
+		common.SysError("request_audit table migration failed: " + err.Error())
+	}
+	// Request audit cleanup task
+	service.StartRequestAuditCleanupTask()
+	// Migrate old audit payloads from DB to filesystem
+	gopool.Go(func() {
+		if err := service.MigrateOldAuditPayloads(); err != nil {
+			common.SysError("request_audit old payload migration failed: " + err.Error())
+		}
+	})
 
 	// Initialize Redis
 	err = common.InitRedisClient()

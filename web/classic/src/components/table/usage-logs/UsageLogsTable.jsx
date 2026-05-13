@@ -25,6 +25,7 @@ import {
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { getLogsColumns } from './UsageLogsColumnDefs';
+import RequestAuditModal from '../../request-audit/RequestAuditModal';
 
 const LogsTable = (logsData) => {
   const {
@@ -44,6 +45,13 @@ const LogsTable = (logsData) => {
     hasExpandableRows,
     isAdminUser,
     billingDisplayMode,
+    requestAuditEnabled,
+    openAuditByRequestId,
+    showAuditModal,
+    setShowAuditModal,
+    auditLoading,
+    auditRecord,
+    setAuditRecord,
     t,
     COLUMN_KEYS,
   } = logsData;
@@ -56,6 +64,8 @@ const LogsTable = (logsData) => {
       copyText,
       showUserInfoFunc,
       openChannelAffinityUsageCacheModal,
+      openAuditByRequestId,
+      requestAuditEnabled,
       isAdminUser,
       billingDisplayMode,
     });
@@ -65,6 +75,8 @@ const LogsTable = (logsData) => {
     copyText,
     showUserInfoFunc,
     openChannelAffinityUsageCacheModal,
+    openAuditByRequestId,
+    requestAuditEnabled,
     isAdminUser,
     billingDisplayMode,
   ]);
@@ -89,6 +101,7 @@ const LogsTable = (logsData) => {
   };
 
   return (
+    <>
     <CardTable
       columns={tableColumns}
       {...(hasExpandableRows() && {
@@ -126,6 +139,15 @@ const LogsTable = (logsData) => {
       }}
       hidePagination={true}
     />
+    <RequestAuditModal
+      visible={showAuditModal}
+      onCancel={() => setShowAuditModal(false)}
+      loading={auditLoading}
+      auditRecord={auditRecord}
+      onOpenRequestAudit={openAuditByRequestId}
+      t={t}
+    />
+  </>
   );
 };
 

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@douyinfe/semi-ui';
 import {
@@ -30,9 +30,17 @@ import {
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { StatusContext } from '../../context/Status';
 
 export const useMjLogsData = () => {
   const { t } = useTranslation();
+  const [statusState] = useContext(StatusContext);
+  const requestAuditStatusReady = Boolean(statusState?.status);
+  const requestAuditEnabled =
+    requestAuditStatusReady &&
+    (statusState?.status?.self_use_mode_enabled ||
+      statusState?.status?.demo_site_enabled ||
+      false);
 
   // Define column keys for selection
   const COLUMN_KEYS = {
@@ -48,6 +56,7 @@ export const useMjLogsData = () => {
     PROMPT: 'prompt',
     PROMPT_EN: 'prompt_en',
     FAIL_REASON: 'fail_reason',
+    AUDIT: 'audit',
   };
 
   // Basic state
@@ -64,12 +73,18 @@ export const useMjLogsData = () => {
   const STORAGE_KEY = isAdminUser
     ? 'mj-logs-table-columns-admin'
     : 'mj-logs-table-columns-user';
+  const AUDIT_VISIBILITY_STORAGE_KEY = `${STORAGE_KEY}-audit-visible`;
+  const AUDIT_VISIBILITY_MIGRATION_KEY = `${STORAGE_KEY}-audit-visible-migrated`;
+  const AUDIT_VISIBILITY_USER_SET_KEY = `${STORAGE_KEY}-audit-visible-user-set`;
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [isModalOpenurl, setIsModalOpenurl] = useState(false);
   const [modalImageUrl, setModalImageUrl] = useState('');
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRecord, setAuditRecord] = useState(null);
 
   // Form state
   const [formApi, setFormApi] = useState(null);
@@ -92,6 +107,9 @@ export const useMjLogsData = () => {
 
   // Load saved column preferences from localStorage
   useEffect(() => {
+    if (!requestAuditStatusReady) {
+      return;
+    }
     const savedColumns = localStorage.getItem(STORAGE_KEY);
     if (savedColumns) {
       try {
@@ -104,6 +122,7 @@ export const useMjLogsData = () => {
           merged[COLUMN_KEYS.CHANNEL] = false;
           merged[COLUMN_KEYS.SUBMIT_RESULT] = false;
         }
+        merged[COLUMN_KEYS.AUDIT] = getStoredAuditVisibility();
         setVisibleColumns(merged);
       } catch (e) {
         console.error('Failed to parse saved column preferences', e);
@@ -112,7 +131,7 @@ export const useMjLogsData = () => {
     } else {
       initDefaultColumns();
     }
-  }, []);
+  }, [requestAuditEnabled, requestAuditStatusReady]);
 
   // Check banner notification
   useEffect(() => {
@@ -276,6 +295,60 @@ export const useMjLogsData = () => {
     setIsModalOpenurl(true);
   };
 
+  const openAuditByRequestId = async (requestId) => {
+    if (!requestAuditEnabled) return;
+    if (!requestId) {
+      showError(t('当前审计记录没有可用的 Request ID'));
+      return;
+    }
+    setAuditRecord(null);
+    setAuditLoading(true);
+    try {
+      const res = await API.get(`/api/request-audit/${requestId}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setAuditRecord(data);
+        setShowAuditModal(true);
+      } else {
+        setAuditRecord(null);
+        setShowAuditModal(false);
+        showError(message);
+      }
+    } catch (error) {
+      setAuditRecord(null);
+      setShowAuditModal(false);
+      showError(t('获取请求审计详情失败'));
+    }
+    setAuditLoading(false);
+  };
+
+  const openAuditByMjId = async (mjId) => {
+    if (!requestAuditEnabled) return;
+    if (!mjId) {
+      showError(t('当前绘图记录没有可用的 MjID'));
+      return;
+    }
+    setAuditRecord(null);
+    setAuditLoading(true);
+    try {
+      const res = await API.get(`/api/request-audit/mj/${mjId}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setAuditRecord(data);
+        setShowAuditModal(true);
+      } else {
+        setAuditRecord(null);
+        setShowAuditModal(false);
+        showError(message);
+      }
+    } catch (error) {
+      setAuditRecord(null);
+      setShowAuditModal(false);
+      showError(t('获取请求审计详情失败'));
+    }
+    setAuditLoading(false);
+  };
+
   // Initialize data
   useEffect(() => {
     const localPageSize =
@@ -331,6 +404,14 @@ export const useMjLogsData = () => {
     openImageModal,
     enrichLogs,
     syncPageData,
+    requestAuditEnabled,
+    openAuditByRequestId,
+    openAuditByMjId,
+    showAuditModal,
+    setShowAuditModal,
+    auditLoading,
+    auditRecord,
+    setAuditRecord,
 
     // Translation
     t,

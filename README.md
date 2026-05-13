@@ -52,6 +52,8 @@
 
 </div>
 
+> **📋 Request Audit (请求审计):** This fork includes a detailed request audit feature that records full request/response/trace payloads for debugging in self-use/demo modes. Payloads are stored in the filesystem (not in DB) to avoid database bloat. See [docs/request-audit/README.md](./docs/request-audit/README.md) for details.
+
 ## 📝 Project Description
 
 > [!IMPORTANT]

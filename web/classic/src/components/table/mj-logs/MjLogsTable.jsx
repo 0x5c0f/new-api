@@ -25,6 +25,7 @@ import {
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { getMjLogsColumns } from './MjLogsColumnDefs';
+import RequestAuditModal from '../../request-audit/RequestAuditModal';
 
 const MjLogsTable = (mjLogsData) => {
   const {
@@ -40,7 +41,14 @@ const MjLogsTable = (mjLogsData) => {
     copyText,
     openContentModal,
     openImageModal,
+    openAuditByMjId,
+    openAuditByRequestId,
     isAdminUser,
+    requestAuditEnabled,
+    showAuditModal,
+    setShowAuditModal,
+    auditLoading,
+    auditRecord,
     t,
     COLUMN_KEYS,
   } = mjLogsData;
@@ -53,9 +61,11 @@ const MjLogsTable = (mjLogsData) => {
       copyText,
       openContentModal,
       openImageModal,
+      openAuditByMjId,
+      requestAuditEnabled,
       isAdminUser,
     });
-  }, [t, COLUMN_KEYS, copyText, openContentModal, openImageModal, isAdminUser]);
+  }, [t, COLUMN_KEYS, copyText, openContentModal, openImageModal, openAuditByMjId, requestAuditEnabled, isAdminUser]);
 
   // Filter columns based on visibility settings
   const getVisibleColumns = () => {
@@ -73,6 +83,7 @@ const MjLogsTable = (mjLogsData) => {
   }, [compactMode, visibleColumnsList]);
 
   return (
+    <>
     <CardTable
       columns={tableColumns}
       dataSource={logs}
@@ -102,6 +113,15 @@ const MjLogsTable = (mjLogsData) => {
       }}
       hidePagination={true}
     />
+    <RequestAuditModal
+      visible={showAuditModal}
+      onCancel={() => setShowAuditModal(false)}
+      loading={auditLoading}
+      auditRecord={auditRecord}
+      onOpenRequestAudit={openAuditByRequestId}
+      t={t}
+    />
+    </>
   );
 };
 

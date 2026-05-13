@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@douyinfe/semi-ui';
 import {
@@ -42,9 +42,17 @@ import {
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 import ParamOverrideEntry from '../../components/table/usage-logs/components/ParamOverrideEntry';
+import { StatusContext } from '../../context/Status';
 
 export const useLogsData = () => {
   const { t } = useTranslation();
+  const [statusState] = useContext(StatusContext);
+  const requestAuditStatusReady = Boolean(statusState?.status);
+  const requestAuditEnabled =
+    requestAuditStatusReady &&
+    (statusState?.status?.self_use_mode_enabled ||
+      statusState?.status?.demo_site_enabled ||
+      false);
 
   // Define column keys for selection
   const COLUMN_KEYS = {
@@ -61,6 +69,7 @@ export const useLogsData = () => {
     COST: 'cost',
     RETRY: 'retry',
     IP: 'ip',
+    AUDIT: 'audit',
     DETAILS: 'details',
   };
 
@@ -84,6 +93,9 @@ export const useLogsData = () => {
   const BILLING_DISPLAY_MODE_STORAGE_KEY = isAdminUser
     ? 'logs-billing-display-mode-admin'
     : 'logs-billing-display-mode-user';
+  const AUDIT_VISIBILITY_STORAGE_KEY = `${STORAGE_KEY}-audit-visible`;
+  const AUDIT_VISIBILITY_MIGRATION_KEY = `${STORAGE_KEY}-audit-visible-migrated`;
+  const AUDIT_VISIBILITY_USER_SET_KEY = `${STORAGE_KEY}-audit-visible-user-set`;
 
   // Statistics state
   const [stat, setStat] = useState({
@@ -124,8 +136,45 @@ export const useLogsData = () => {
       [COLUMN_KEYS.COST]: true,
       [COLUMN_KEYS.RETRY]: isAdminUser,
       [COLUMN_KEYS.IP]: true,
+      [COLUMN_KEYS.AUDIT]: requestAuditEnabled,
       [COLUMN_KEYS.DETAILS]: true,
     };
+  };
+
+  const getStoredAuditVisibility = () => {
+    if (!requestAuditEnabled) {
+      return false;
+    }
+    const storedVisibility = localStorage.getItem(AUDIT_VISIBILITY_STORAGE_KEY);
+    const userSetAuditVisibility =
+      localStorage.getItem(AUDIT_VISIBILITY_USER_SET_KEY) === 'true';
+    if (storedVisibility === 'true' || storedVisibility === 'false') {
+      const migrated =
+        localStorage.getItem(AUDIT_VISIBILITY_MIGRATION_KEY) === 'true';
+      if (!migrated) {
+        localStorage.setItem(AUDIT_VISIBILITY_MIGRATION_KEY, 'true');
+        if (storedVisibility === 'false' && !userSetAuditVisibility) {
+          localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+          return true;
+        }
+      }
+      if (storedVisibility === 'false' && !userSetAuditVisibility) {
+        localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+        return true;
+      }
+      return storedVisibility === 'true';
+    }
+    localStorage.setItem(AUDIT_VISIBILITY_MIGRATION_KEY, 'true');
+    localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+    return true;
+  };
+
+  const sanitizeColumnVisibilityForStorage = (columns) => {
+    const next = { ...columns };
+    if (!requestAuditEnabled) {
+      delete next[COLUMN_KEYS.AUDIT];
+    }
+    return next;
   };
 
   const getInitialVisibleColumns = () => {
@@ -145,6 +194,7 @@ export const useLogsData = () => {
         merged[COLUMN_KEYS.USERNAME] = false;
         merged[COLUMN_KEYS.RETRY] = false;
       }
+      merged[COLUMN_KEYS.AUDIT] = getStoredAuditVisibility();
 
       return merged;
     } catch (e) {
@@ -186,18 +236,39 @@ export const useLogsData = () => {
     useState(null);
   const [showParamOverrideModal, setShowParamOverrideModal] = useState(false);
   const [paramOverrideTarget, setParamOverrideTarget] = useState(null);
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRecord, setAuditRecord] = useState(null);
 
   // Initialize default column visibility
   const initDefaultColumns = () => {
     const defaults = getDefaultColumnVisibility();
     setVisibleColumns(defaults);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(sanitizeColumnVisibilityForStorage(defaults)),
+    );
+    if (requestAuditEnabled) {
+      localStorage.setItem(AUDIT_VISIBILITY_STORAGE_KEY, 'true');
+      localStorage.removeItem(AUDIT_VISIBILITY_USER_SET_KEY);
+    }
   };
 
   // Handle column visibility change
   const handleColumnVisibilityChange = (columnKey, checked) => {
-    const updatedColumns = { ...visibleColumns, [columnKey]: checked };
+    const updatedColumns = {
+      ...visibleColumns,
+      [columnKey]:
+        columnKey === COLUMN_KEYS.AUDIT && !requestAuditEnabled ? false : checked,
+    };
     setVisibleColumns(updatedColumns);
+    if (columnKey === COLUMN_KEYS.AUDIT && requestAuditEnabled) {
+      localStorage.setItem(AUDIT_VISIBILITY_USER_SET_KEY, 'true');
+      localStorage.setItem(
+        AUDIT_VISIBILITY_STORAGE_KEY,
+        updatedColumns[COLUMN_KEYS.AUDIT] ? 'true' : 'false',
+      );
+    }
   };
 
   // Handle "Select All" checkbox
@@ -213,20 +284,73 @@ export const useLogsData = () => {
         !isAdminUser
       ) {
         updatedColumns[key] = false;
+      } else if (key === COLUMN_KEYS.AUDIT && !requestAuditEnabled) {
+        updatedColumns[key] = false;
       } else {
         updatedColumns[key] = checked;
       }
     });
 
     setVisibleColumns(updatedColumns);
+    if (requestAuditEnabled) {
+      localStorage.setItem(AUDIT_VISIBILITY_USER_SET_KEY, 'true');
+    }
   };
 
   // Persist column settings to the role-specific STORAGE_KEY
   useEffect(() => {
-    if (Object.keys(visibleColumns).length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleColumns));
+    if (!requestAuditStatusReady) {
+      return;
     }
-  }, [visibleColumns]);
+    if (Object.keys(visibleColumns).length > 0) {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(sanitizeColumnVisibilityForStorage(visibleColumns)),
+      );
+      if (requestAuditEnabled && visibleColumns[COLUMN_KEYS.AUDIT] !== undefined) {
+        localStorage.setItem(
+          AUDIT_VISIBILITY_STORAGE_KEY,
+          visibleColumns[COLUMN_KEYS.AUDIT] ? 'true' : 'false',
+        );
+      }
+    }
+  }, [requestAuditEnabled, requestAuditStatusReady, visibleColumns]);
+
+  useEffect(() => {
+    if (!requestAuditStatusReady) {
+      return;
+    }
+    if (!requestAuditEnabled && visibleColumns[COLUMN_KEYS.AUDIT] !== false) {
+      setVisibleColumns((prev) => ({ ...prev, [COLUMN_KEYS.AUDIT]: false }));
+    }
+  }, [
+    requestAuditEnabled,
+    requestAuditStatusReady,
+    visibleColumns,
+    COLUMN_KEYS.AUDIT,
+  ]);
+
+  useEffect(() => {
+    if (!requestAuditStatusReady || !requestAuditEnabled) {
+      return;
+    }
+    const storedAuditVisibility = getStoredAuditVisibility();
+    setVisibleColumns((prev) => {
+      if (Object.keys(prev).length === 0) {
+        return {
+          ...getDefaultColumnVisibility(),
+          [COLUMN_KEYS.AUDIT]: storedAuditVisibility,
+        };
+      }
+      if (prev[COLUMN_KEYS.AUDIT] === storedAuditVisibility) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [COLUMN_KEYS.AUDIT]: storedAuditVisibility,
+      };
+    });
+  }, [requestAuditEnabled, requestAuditStatusReady]);
 
   useEffect(() => {
     localStorage.setItem(BILLING_DISPLAY_MODE_STORAGE_KEY, billingDisplayMode);
@@ -362,6 +486,35 @@ export const useLogsData = () => {
       requestPath: other?.request_path || '',
     });
     setShowParamOverrideModal(true);
+  };
+
+  const openAuditByRequestId = async (requestId) => {
+    if (!requestAuditEnabled) {
+      return;
+    }
+    if (!requestId) {
+      showError(t('当前日志没有可用的 Request ID'));
+      return;
+    }
+    setAuditRecord(null);
+    setAuditLoading(true);
+    try {
+      const res = await API.get(`/api/request-audit/${requestId}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setAuditRecord(data);
+        setShowAuditModal(true);
+      } else {
+        setAuditRecord(null);
+        setShowAuditModal(false);
+        showError(message);
+      }
+    } catch (error) {
+      setAuditRecord(null);
+      setShowAuditModal(false);
+      showError(t('获取请求审计详情失败'));
+    }
+    setAuditLoading(false);
   };
 
   // Format logs data
@@ -866,6 +1019,7 @@ export const useLogsData = () => {
     // Compact mode
     compactMode,
     setCompactMode,
+    requestAuditEnabled,
 
     // User info modal
     showUserInfo,
@@ -881,6 +1035,12 @@ export const useLogsData = () => {
     showParamOverrideModal,
     setShowParamOverrideModal,
     paramOverrideTarget,
+    showAuditModal,
+    setShowAuditModal,
+    auditLoading,
+    auditRecord,
+    setAuditRecord,
+    openAuditByRequestId,
 
     // Functions
     loadLogs,

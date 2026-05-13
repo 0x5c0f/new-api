@@ -241,6 +241,8 @@ export const getTaskLogsColumns = ({
   isAdminUser,
   openVideoModal,
   openAudioModal,
+  openAuditByTaskId,
+  requestAuditEnabled,
 }) => {
   return [
     {
@@ -378,6 +380,27 @@ export const getTaskLogsColumns = ({
               />
             )}
           </div>
+        );
+      },
+    },
+    {
+      key: COLUMN_KEYS.AUDIT,
+      title: t('审计'),
+      dataIndex: 'task_id',
+      fixed: 'right',
+      width: 110,
+      render: (text) => {
+        if (!requestAuditEnabled || !text) {
+          return <></>;
+        }
+        return (
+          <Button
+            size='small'
+            type='tertiary'
+            onClick={() => openAuditByTaskId(text)}
+          >
+            {t('查看审计')}
+          </Button>
         );
       },
     },
