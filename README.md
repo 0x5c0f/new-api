@@ -1,3 +1,7 @@
+已经更新一个新的版本，审计日志将不直接存储于数据库，而是存储于文件中，从而减少数据库压力，具体信息可以查看下 [`feat-custom/release`](https://github.com/0x5c0f/new-api/tree/feat-custom/release) 分支。 
+
+----------
+
 <div align="center">
 
 ![new-api](/web/public/logo.png)
